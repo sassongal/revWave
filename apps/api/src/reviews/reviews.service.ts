@@ -31,16 +31,39 @@ interface ReviewFilters {
   maxRating?: number;
 }
 
+interface PaginationOptions {
+  page?: number;
+  pageSize?: number;
+}
+
+interface PaginatedResult<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+}
+
 @Injectable()
 export class ReviewsService {
   private readonly logger = new Logger(ReviewsService.name);
+  private readonly DEFAULT_PAGE_SIZE = 20;
+  private readonly MAX_PAGE_SIZE = 50;
 
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Find all reviews for a tenant with optional filters
+   * Find all reviews for a tenant with optional filters and pagination
    */
-  async findAll(tenantId: string, filters?: ReviewFilters) {
+  async findAll(
+    tenantId: string,
+    filters?: ReviewFilters,
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedResult<any>> {
     const where: any = { tenantId };
 
     if (filters?.locationId) {
@@ -65,23 +88,51 @@ export class ReviewsService {
       }
     }
 
-    return this.prisma.review.findMany({
-      where,
-      include: {
-        location: {
-          select: {
-            id: true,
-            name: true,
-            externalId: true,
+    // Pagination
+    const page = pagination?.page || 1;
+    const pageSize = Math.min(
+      pagination?.pageSize || this.DEFAULT_PAGE_SIZE,
+      this.MAX_PAGE_SIZE,
+    );
+    const skip = (page - 1) * pageSize;
+
+    // Get total count and reviews in parallel
+    const [totalItems, reviews] = await Promise.all([
+      this.prisma.review.count({ where }),
+      this.prisma.review.findMany({
+        where,
+        include: {
+          location: {
+            select: {
+              id: true,
+              name: true,
+              externalId: true,
+            },
+          },
+          replies: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
         },
-        replies: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
+        orderBy: { publishedAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / pageSize);
+
+    return {
+      data: reviews,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
       },
-      orderBy: { publishedAt: 'desc' },
-    });
+    };
   }
 
   /**
