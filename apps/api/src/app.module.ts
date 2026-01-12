@@ -8,6 +8,7 @@ import { CryptoModule } from './common/crypto/crypto.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { LocationsModule } from './locations/locations.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     IntegrationsModule,
     LocationsModule,
     ReviewsModule,
+    SyncModule,
   ],
 })
 export class AppModule {}
