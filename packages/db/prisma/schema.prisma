@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Core Entities
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  provider  String   @default("google") // google
+  providerId String  @unique @map("provider_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  memberships Membership[]
+  campaigns   Campaign[]
+  sessions    Session[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String?  @unique
+  timezone    String   @default("UTC")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  memberships  Membership[]
+  integrations Integration[]
+  locations    Location[]
+  reviews      Review[]
+  tags         Tag[]
+  tapEvents    TapEvent[]
+  contacts     Contact[]
+  campaigns    Campaign[]
+  sessions     Session[]
+
+  @@map("tenants")
+}
+
+model Membership {
+  id       String @id @default(uuid())
+  role     String @default("owner") // owner, manager
+
+  userId   String @map("user_id")
+  tenantId String @map("tenant_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("memberships")
+}
+
+// ============================================
+// Session Management
+// ============================================
+
+model Session {
+  id          String   @id @default(uuid())
+  sessionId   String   @unique @map("session_id") // Redis session ID (sid)
+
+  userId      String   @map("user_id")
+  tenantId    String   @map("tenant_id") // Denormalized for fast lookup
+
+  data        Json?    // Session data (optional, mainly in Redis)
+  expiresAt   DateTime @map("expires_at")
+
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([expiresAt]) // For cleanup queries
+  @@map("sessions")
+}
+
+// ============================================
+// Google Business Profile
+// ============================================
+
+model Integration {
+  id                String   @id @default(uuid())
+  provider          String   // "google_business"
+  status            String   @default("pending") // pending, connected, disconnected, error
+
+  // OAuth tokens stored encrypted using AES-256-GCM via EncryptionService
+  accessToken       String?  @map("access_token") @db.Text
+  refreshToken      String?  @map("refresh_token") @db.Text
+  tokenExpiresAt    DateTime? @map("token_expires_at")
+
+  scopes            String[] // OAuth scopes
+  metadata          Json?    // Provider-specific data
+
+  tenantId          String   @map("tenant_id")
+
+  lastSyncAt        DateTime? @map("last_sync_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locations Location[]
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+  @@map("integrations")
+}
+
+model Location {
+  id                String   @id @default(uuid())
+  externalId        String   @map("external_id") // Google location ID (as returned by API)
+  name              String
+  address           String?
+  phoneNumber       String?  @map("phone_number")
+  websiteUrl        String?  @map("website_url")
+
+  metadata          Json?    // Full location data from Google
+
+  integrationId     String   @map("integration_id")
+  tenantId          String   @map("tenant_id")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reviews     Review[]
+  tags        Tag[]
+
+  @@unique([integrationId, externalId])
+  @@index([tenantId])
+  @@index([integrationId])
+  @@map("locations")
+}
+
+model Review {
+  id              String   @id @default(uuid())
+  externalId      String   @map("external_id") // Google review ID
+
+  rating          Int      // 1-5
+  content         String?  @db.Text
+  reviewerName    String   @map("reviewer_name")
+  reviewerAvatar  String?  @map("reviewer_avatar")
+
+  publishedAt     DateTime @map("published_at")
+  repliedStatus   String   @default("pending") @map("replied_status") // pending, drafted, replied
+
+  metadata        Json?    // Full review data from Google
+
+  locationId      String   @map("location_id")
+  tenantId        String   @map("tenant_id")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  replies  Reply[]
+
+  @@unique([locationId, externalId])
+  @@index([tenantId])
+  @@index([locationId])
+  @@index([repliedStatus])
+  @@map("reviews")
+}
+
+model Reply {
+  id              String   @id @default(uuid())
+  content         String   @db.Text
+  isDraft         Boolean  @default(true) @map("is_draft")
+
+  publishedAt     DateTime? @map("published_at")
+  publishedBy     String?   @map("published_by") // User ID
+
+  aiGenerated     Boolean  @default(false) @map("ai_generated")
+  aiModel         String?  @map("ai_model")
+
+  reviewId        String   @map("review_id")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@map("replies")
+}
+
+// ============================================
+// Tags & Redirect
+// ============================================
+
+model Tag {
+  id          String   @id @default(uuid())
+  publicCode  String   @unique @map("public_code") // Short code for /t/{code}
+  name        String?  // Internal label
+  status      String   @default("active") // active, inactive
+
+  locationId  String?  @map("location_id")
+  tenantId    String   @map("tenant_id")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  location  Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tapEvents TapEvent[]
+
+  @@index([tenantId])
+  @@index([publicCode])
+  @@map("tags")
+}
+
+model TapEvent {
+  id         String   @id @default(uuid())
+
+  tagId      String   @map("tag_id")
+  tenantId   String   @map("tenant_id")
+
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  metadata   Json?    // Additional tracking data
+
+  tappedAt   DateTime @default(now()) @map("tapped_at")
+
+  // Relations
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tagId])
+  @@index([tenantId])
+  @@index([tappedAt])
+  @@map("tap_events")
+}
+
+// ============================================
+// Mini CRM & Campaigns
+// ============================================
+
+model Contact {
+  id                String   @id @default(uuid())
+  email             String
+  phone             String?
+  firstName         String?  @map("first_name")
+  lastName          String?  @map("last_name")
+
+  source            String   // landing_page, manual, import
+  consentStatus     String   @map("consent_status") // granted, revoked
+  consentTimestamp  DateTime @map("consent_timestamp")
+  consentSource     String?  @map("consent_source") // form_id, tag, campaign
+
+  tenantId          String   @map("tenant_id")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaignRecipients  CampaignRecipient[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([consentStatus])
+  @@map("contacts")
+}
+
+model Campaign {
+  id            String   @id @default(uuid())
+  name          String
+  subject       String
+  bodyHtml      String   @map("body_html") @db.Text
+
+  status        String   @default("draft") // draft, scheduled, sent, failed
+  scheduledAt   DateTime? @map("scheduled_at")
+  sentAt        DateTime? @map("sent_at")
+
+  createdByUserId String @map("created_by_user_id")
+  tenantId        String @map("tenant_id")
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy User                @relation(fields: [createdByUserId], references: [id])
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipients CampaignRecipient[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id            String   @id @default(uuid())
+
+  campaignId    String   @map("campaign_id")
+  contactId     String   @map("contact_id")
+
+  status        String   @default("pending") // pending, sent, failed
+  sentAt        DateTime? @map("sent_at")
+  errorMessage  String?   @map("error_message") @db.Text
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId])
+  @@index([contactId])
+  @@map("campaign_recipients")
+}

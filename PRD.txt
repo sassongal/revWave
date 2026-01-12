@@ -1,0 +1,755 @@
+revWave — Product Requirements Document (PRD)
+MVP — LOCKED VERSION
+
+Status: LOCKED (No open product decisions)
+Audience: Product, Engineering, AI Agents (Cursor / Gemini)
+Target: MVP פונקציונלי ללקוחות ראשונים
+Environment: Local development → Pilot customers
+Primary Platform: Google Business Profile
+
+1. Product Definition
+1.1 Product Name
+
+revWave
+
+1.2 Product Description
+
+revWave הוא מוצר SaaS לניהול מוניטין דיגיטלי לעסקים מקומיים, המתמקד ב־Google Reviews.
+המוצר מאפשר:
+
+חיבור Google Business Profile
+
+סנכרון ביקורות
+
+ניהול Inbox לביקורות
+
+יצירת טיוטות תגובה באמצעות AI
+
+פרסום תגובות לגוגל מתוך המערכת
+
+ניהול תגי NFC/QR עם Redirect חכם
+
+אנליטיקס בסיסי לשימוש ופעילות
+
+2. Product Goals (MVP)
+2.1 Primary Goals
+
+לאפשר לעסק לראות ולהגיב לביקורות גוגל במקום אחד
+
+לקצר משמעותית את זמן התגובה לביקורות
+
+להנגיש תגובות איכותיות גם למי שלא יודע “איך לענות”
+
+לאפשר שימוש פיזי (NFC/QR) שמוביל לביקורות
+
+2.2 Success Metrics
+
+User completes onboarding (login + connect Google) < 10 דקות
+
+≥70% מהביקורות מקבלות draft AI
+
+≥50% מהביקורות מקבלות תגובה שפורסמה
+
+Redirect endpoint success rate ≥99%
+
+No cross-tenant data exposure (critical)
+
+3. Scope Definition
+3.1 In Scope (MVP)
+
+Google Business Profile בלבד
+
+Multi-tenant ברמת Tenant אחד למשתמש
+
+Reviews Inbox
+
+AI Draft Replies
+
+Publish Reply to Google
+
+Tag management (NFC/QR)
+
+Redirect service
+
+Analytics בסיסי
+
+3.2 Explicitly Out of Scope (MVP)
+
+פלטפורמות ביקורות נוספות (Facebook / Yelp / Tripadvisor)
+
+Multi-tenant switching UI
+
+Agency / White-label
+
+Campaigns / SMS / WhatsApp
+
+Billing / Payments
+
+Landing page builder מתקדם
+
+Review gating / filtering
+
+4. Core Product Decisions (LOCKED)
+Topic	Decision
+Review Platforms	Google only
+Tenant Model	1 Tenant per User (MVP)
+Multi-membership	DB-ready, logic disabled
+Auth	Google OAuth
+Session	Backend-set HttpOnly Cookie
+Tenant Context	Derived from authenticated user
+Redirect Service	Same backend, isolated controller
+AI	Draft-only, user must approve
+Location ID	Stored exactly as returned by Google API
+5. User Roles (MVP)
+5.1 Roles
+
+Owner: Full access
+
+Manager: Reviews, Replies, Tags, Analytics
+
+(Role system minimal; permissions enforced server-side)
+
+6. User Journeys (LOCKED)
+Journey A — Onboarding
+
+User clicks “Sign in with Google”
+
+Google OAuth (Auth)
+
+Backend:
+
+Creates User
+
+Creates Tenant
+
+Sets session cookie
+
+User redirected to Dashboard
+
+Acceptance:
+User lands on Dashboard authenticated, without manual setup.
+
+Journey B — Connect Google Business
+
+User navigates to Integrations
+
+Clicks “Connect Google Business”
+
+OAuth flow with review scopes
+
+Tokens stored encrypted
+
+Initial sync triggered
+
+Acceptance:
+User sees Locations + Reviews populated.
+
+Journey C — Review → AI Draft → Publish
+
+User opens review in Inbox
+
+Clicks “Suggest AI reply”
+
+Draft generated and displayed
+
+User edits
+
+User clicks “Publish”
+
+Reply published to Google
+
+Acceptance:
+Review status updated to “Replied”, visible in UI.
+
+Journey D — Tag → Redirect
+
+User creates Tag
+
+Tag assigned to Location
+
+User embeds /t/{code} in NFC/QR
+
+End user taps
+
+Redirect to Google review URL
+
+Tap recorded
+
+Acceptance:
+302 redirect + tap event logged.
+
+7. Functional Requirements (by Epic)
+EPIC 1 — Foundation & Auth
+FR-1.1 Environment
+
+NestJS backend
+
+Next.js frontend
+
+PostgreSQL
+
+Docker optional
+
+Git initialized
+
+Acceptance
+
+Backend + frontend run locally
+
+DB connection verified
+
+FR-1.2 Auth
+
+Google OAuth (login)
+
+New user → new Tenant
+
+Session via HttpOnly cookie (server-side only)
+
+Acceptance
+
+No JWT handling in frontend
+
+Cookie present after login
+
+Protected routes inaccessible without session
+
+FR-1.3 Tenant Context
+
+Tenant derived from authenticated user
+
+No trust in client-sent tenant IDs
+
+Acceptance
+
+User cannot access data of another tenant by modifying requests
+
+EPIC 2 — Google Business Integration
+FR-2.1 OAuth (Business)
+
+Separate OAuth flow for Business Profile
+
+Scopes required for:
+
+Locations
+
+Reviews
+
+Reply publishing
+
+Acceptance
+
+Tokens stored encrypted
+
+Integration marked CONNECTED
+
+FR-2.2 Sync Service
+
+Pull locations
+
+Pull reviews per location
+
+Upsert logic (no duplicates)
+
+Acceptance
+
+Re-running sync is idempotent
+
+EPIC 3 — Reviews Inbox
+FR-3.1 Review Model
+
+rating
+
+content
+
+reviewer name
+
+timestamps
+
+replied status
+
+Acceptance
+
+Inbox lists reviews correctly
+
+Filters work (basic)
+
+EPIC 4 — AI Replies
+FR-4.1 Draft Generation
+
+AI Service generates polite, professional draft
+
+Language inferred or defaulted
+
+Constraints
+
+Draft only
+
+No auto-publish
+
+Acceptance
+
+Draft returned < acceptable latency
+
+Draft stored in DB
+
+FR-4.2 Publish Reply
+
+Publish via Google API
+
+Store published response
+
+Acceptance
+
+Published replies visible
+
+Failure handled gracefully
+
+EPIC 5 — Tags & Redirect
+FR-5.1 Tag Model
+
+public_code (unique)
+
+status
+
+location_id
+
+Acceptance
+
+Tag creation works
+
+Assignment persists
+
+FR-5.2 Redirect Endpoint
+
+GET /t/{code}
+
+No auth
+
+Rate limited
+
+Flow:
+
+Validate tag
+
+Log tap
+
+Redirect
+
+Acceptance
+
+Always returns valid redirect or 404
+
+No tenant leakage
+
+EPIC 6 — Analytics
+FR-6.1 Tap Events
+
+Store timestamp, tag_id, tenant_id
+
+FR-6.2 Dashboard Metrics
+
+Taps this month
+
+New reviews (7d)
+
+Average rating
+
+Acceptance
+
+Numbers consistent with DB
+
+8. Data Model (LOCKED)
+Core
+
+users
+
+tenants
+
+memberships (DB-only, no UI in MVP)
+
+Google
+
+integrations
+
+locations
+
+reviews
+
+replies
+
+Tags & Analytics
+
+tags
+
+tap_events
+
+(Exact fields as discussed previously — no placeholders)
+
+9. API Surface (LOCKED)
+Auth
+
+GET /auth/google
+
+GET /auth/google/callback
+
+POST /auth/logout
+
+GET /me
+
+Integrations
+
+POST /integrations/google/connect
+
+GET /integrations
+
+Sync
+
+POST /sync/google/run
+
+Reviews
+
+GET /reviews
+
+POST /reviews/{id}/draft
+
+POST /reviews/{id}/reply
+
+Tags
+
+GET /tags
+
+POST /tags
+
+PATCH /tags/{id}
+
+Public
+
+GET /t/{code}
+
+Analytics
+
+GET /analytics/summary
+
+10. Security & Compliance (LOCKED)
+
+Tenant isolation enforced server-side
+
+Tokens encrypted at rest
+
+HttpOnly cookies only
+
+No client-side secrets
+
+Rate limiting on public endpoints
+
+Audit logging for:
+
+OAuth connect/disconnect
+
+Reply publish
+
+11. Risks & Mitigations
+Risk	Mitigation
+Google API instability	Retries + clear errors
+Token expiry	Refresh flow
+AI hallucination	Draft-only, user approval
+Redirect abuse	Throttling
+Data leakage	Strict tenant scoping
+12. Milestones (Execution Order)
+
+Foundation & Auth
+
+Google Integration & Sync
+
+Reviews Inbox
+
+AI Draft & Publish
+
+Tags & Redirect
+
+Analytics Dashboard
+
+13. Definition of Done (MVP)
+
+The MVP is DONE when:
+
+A real business can:
+
+Log in
+
+Connect Google
+
+See reviews
+
+Generate AI draft
+
+Publish reply
+
+Use NFC/QR redirect
+
+See basic analytics
+
+Without developer intervention
+
+Without data leakage
+
+Without manual DB edits
+
+14. Final Note (to Engineers & AI Agents)
+
+This PRD is LOCKED.
+No scope expansion without explicit product decision.
+Optimize for clarity, correctness, and stability — not cleverness.
+
+
+EPIC 7 — Mini CRM & Customer Communications (MVP Extension)
+מטרה
+
+לאפשר לבעל עסק:
+
+לשמור לקוחות קצה שנתנו הסכמה
+
+לנהל רשימת Contacts בסיסית
+
+לשלוח ניוזלטרים ועדכונים
+
+לחזק קשר עם לקוחות קיימים
+
+7.1 Contact Management
+Entity: Contact
+contacts
+- id
+- tenant_id
+- email
+- phone (optional)
+- first_name
+- last_name
+- source (landing_page / manual / import)
+- consent_status (granted / revoked)
+- consent_timestamp
+- consent_source (form_id / tag / campaign)
+- created_at
+- updated_at
+
+Rules (LOCKED)
+
+Contact נוצר רק אם consent_status = granted
+
+revoking consent:
+
+לא מוחק את הרשומה
+
+מסמן consent_status = revoked
+
+מונע כל שליחה עתידית
+
+Acceptance
+
+אי אפשר לשלוח תוכן ל-contact ללא consent פעיל
+
+ניתן לראות מתי ואיך ניתנה ההסכמה
+
+7.2 Contact Sources (MVP)
+
+Contacts יכולים להגיע מ:
+
+Landing page פשוט (אופציונלי)
+
+Manual add (Owner בלבד)
+
+Import CSV (V1 – לא חובה במVP)
+
+ב-MVP:
+
+Manual add + API ready
+
+Landing page בסיסי אפשרי כהרחבה קלה
+
+7.3 Segmentation (בסיסי)
+Segments (Dynamic)
+
+All contacts
+
+Subscribed (consent granted)
+
+Unsubscribed
+
+Created after date X
+
+Rules
+
+אין segments מורכבים (AND/OR מתקדם) במVP
+
+חישוב בזמן אמת או cached
+
+7.4 Newsletter / Campaigns
+Entity: Campaign
+campaigns
+- id
+- tenant_id
+- name
+- subject
+- body_html
+- status (draft / scheduled / sent / failed)
+- scheduled_at (nullable)
+- sent_at (nullable)
+- created_by_user_id
+- created_at
+
+Entity: CampaignRecipient
+campaign_recipients
+- id
+- campaign_id
+- contact_id
+- status (pending / sent / failed)
+- sent_at
+- error_message (nullable)
+
+7.5 Sending Logic (MVP)
+Rules
+
+שליחה ידנית בלבד (“Send now”)
+
+אין scheduling מורכב (אפשר תאריך עתידי אחד)
+
+שליחה נעשית דרך Provider אחד (SMTP / SendGrid / SES)
+
+Flow
+
+User בוחר segment
+
+Preview campaign
+
+Click “Send”
+
+Backend:
+
+יוצר CampaignRecipient records
+
+שולח אחד־אחד (או batch קטן)
+
+מעדכן סטטוסים
+
+Acceptance
+
+סטטוס campaign מתעדכן
+
+אפשר לראות כמה נשלחו / נכשלו
+
+7.6 Unsubscribe & Compliance
+Mandatory
+
+כל מייל כולל:
+
+Unsubscribe link
+
+Endpoint:
+
+GET /unsubscribe/{token}
+
+Behavior
+
+לחיצה → consent_status = revoked
+
+Redirect לדף confirmation פשוט
+
+7.7 CRM UI (MVP Screens)
+Screens
+
+Contacts List
+
+שם, מייל, consent, מקור
+
+Contact Details
+
+פרטים + consent history
+
+Campaigns List
+
+Draft / Sent
+
+Campaign Editor
+
+Subject
+
+Body
+
+Segment selector
+
+Preview
+
+Campaign Report
+
+Sent / Failed counts
+
+7.8 API Surface (Mini CRM)
+Contacts
+
+GET /contacts
+
+POST /contacts
+
+PATCH /contacts/{id}
+
+POST /contacts/{id}/revoke-consent
+
+Campaigns
+
+GET /campaigns
+
+POST /campaigns
+
+POST /campaigns/{id}/send
+
+GET /campaigns/{id}/report
+
+Public
+
+GET /unsubscribe/{token}
+
+7.9 Security & Legal (LOCKED)
+
+Contacts תמיד scoped ל-tenant
+
+No cross-tenant sending
+
+Consent mandatory
+
+Audit log:
+
+consent granted
+
+consent revoked
+
+campaign sent
+
+4️⃣ איך זה משתלב בלי לפוצץ MVP?
+סדר נכון:
+
+בונה revWave core (Reviews + AI + Tags)
+
+מוסיף Contacts table + UI פשוט
+
+מוסיף Campaigns (send only)
+
+משאיר:
+
+Automation
+
+Drip
+
+A/B
+ל-V1/V2
+
+5️⃣ פיצ’רים עתידיים (לא עכשיו, אבל תכנונית)
+
+Request review campaign (X ימים אחרי ביקור)
+
+WhatsApp / SMS
+
+AI-generated newsletter copy
+
+Smart segments
+
+Agency-wide campaigns
