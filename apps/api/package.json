@@ -27,6 +27,7 @@
     "@nestjs/platform-express": "^10.3.0",
     "@nestjs/schedule": "^4.0.0",
     "@nestjs/throttler": "^5.1.1",
+    "@prisma/client": "5.22.0",
     "@revwave/db": "workspace:*",
     "axios": "^1.6.5",
     "bcrypt": "^5.1.1",
@@ -41,6 +42,7 @@
     "openai": "^4.24.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "prisma": "5.22.0",
     "redis": "^4.6.11",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1"

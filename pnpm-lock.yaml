@@ -69,6 +69,9 @@ importers:
       '@nestjs/throttler':
         specifier: ^5.1.1
         version: 5.2.0(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)(reflect-metadata@0.2.2)
+      '@prisma/client':
+        specifier: 5.22.0
+        version: 5.22.0(prisma@5.22.0)
       '@revwave/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -111,6 +114,9 @@ importers:
       passport-google-oauth20:
         specifier: ^2.0.0
         version: 2.0.0
+      prisma:
+        specifier: 5.22.0
+        version: 5.22.0
       redis:
         specifier: ^4.6.11
         version: 4.7.1

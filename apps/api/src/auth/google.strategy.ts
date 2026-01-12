@@ -7,7 +7,7 @@ import { PrismaService } from '../database/prisma.service';
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(
-    private readonly configService: ConfigService,
+    configService: ConfigService,
     private readonly prisma: PrismaService
   ) {
     super({
@@ -20,8 +20,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   }
 
   async validate(
-    accessToken: string,
-    refreshToken: string,
+    _accessToken: string,
+    _refreshToken: string,
     profile: any,
     done: VerifyCallback
   ): Promise<any> {
@@ -29,7 +29,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
 
     const email = emails?.[0]?.value;
     if (!email) {
-      return done(new Error('No email found in Google profile'), null);
+      return done(new Error('No email found in Google profile'), false);
     }
 
     // Find or create user

@@ -5,7 +5,8 @@ import { SessionGuard } from '../common/guards/session.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
-import { User, Tenant, Membership } from '@prisma/client';
+import { Tenant, Membership } from '@prisma/client';
+import { UserWithMemberships } from '../common/types/request.types';
 import { GoogleAuthGuard } from './google-auth.guard';
 import { SessionsService } from './sessions.service';
 import { Session } from '../common/types/session.types';
@@ -24,7 +25,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(SessionGuard, TenantGuard)
   async getMe(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserWithMemberships,
     @CurrentTenant() tenant: Tenant,
   ) {
     // Find the membership for this tenant

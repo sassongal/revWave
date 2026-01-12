@@ -8,7 +8,7 @@ export class GoogleBusinessStrategy extends PassportStrategy(
   Strategy,
   'google-business'
 ) {
-  constructor(private readonly configService: ConfigService) {
+  constructor(configService: ConfigService) {
     super({
       clientID: configService.get<string>('GOOGLE_BUSINESS_CLIENT_ID'),
       clientSecret: configService.get<string>('GOOGLE_BUSINESS_CLIENT_SECRET'),
@@ -26,7 +26,7 @@ export class GoogleBusinessStrategy extends PassportStrategy(
   }
 
   async validate(
-    req: any,
+    _req: any,
     accessToken: string,
     refreshToken: string,
     params: any,

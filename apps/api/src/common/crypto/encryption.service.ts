@@ -32,6 +32,9 @@ export class EncryptionService {
       );
     }
 
+    // Debug: log key length (first 10 chars only for security)
+    this.logger.debug(`ENCRYPTION_KEY length: ${keyString.length} chars, first 10: ${keyString.substring(0, 10)}...`);
+
     let key: Buffer;
 
     // Try base64 first
@@ -143,7 +146,7 @@ export class EncryptionService {
       return decrypted;
     } catch (error) {
       this.logger.error('Decryption failed', error);
-      throw new Error(`Decryption failed: ${error.message}`);
+      throw new Error(`Decryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

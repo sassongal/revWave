@@ -11,7 +11,12 @@ import { IntegrationsModule } from './integrations/integrations.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: [
+        '.env.local',
+        '.env',
+        '../../.env.local',  // Root .env.local (if exists)
+        '../../.env',         // Root .env (if exists)
+      ],
     }),
     DatabaseModule,
     CryptoModule,
