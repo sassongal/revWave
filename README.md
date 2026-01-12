@@ -53,7 +53,7 @@
 ### 1️⃣ Clone and Install
 
 ```bash
-git clone https://github.com/yourusername/revWave.git
+git clone https://github.com/sassongal/revWave.git
 cd revWave
 pnpm install
 ```
@@ -308,8 +308,8 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 ## 📞 Support
 
 - 📧 Email: support@revwave.com
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/revWave/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/revWave/discussions)
+- 🐛 Issues: [GitHub Issues](https://github.com/sassongal/revWave/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/sassongal/revWave/discussions)
 
 ---
 
