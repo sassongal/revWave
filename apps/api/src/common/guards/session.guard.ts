@@ -17,6 +17,11 @@ export class SessionGuard implements CanActivate {
 
     // Check if session exists and has userId
     if (!session || !session.userId) {
+      console.error('[SessionGuard] No active session or userId missing', {
+        hasSession: !!session,
+        userId: session?.userId,
+        sessionId: session?.id,
+      });
       throw new UnauthorizedException('No active session');
     }
 
@@ -33,6 +38,9 @@ export class SessionGuard implements CanActivate {
     });
 
     if (!user) {
+      console.error('[SessionGuard] User not found in database', {
+        userId: session.userId,
+      });
       throw new UnauthorizedException('User not found');
     }
 

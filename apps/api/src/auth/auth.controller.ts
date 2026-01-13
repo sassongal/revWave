@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { SessionGuard } from '../common/guards/session.guard';
@@ -83,5 +83,28 @@ export class AuthController {
     // Redirect to dashboard
     const webAppUrl = this.configService.get<string>('WEB_APP_URL') || 'http://localhost:3000';
     res.redirect(`${webAppUrl}/dashboard`);
+  }
+
+  @Post('logout')
+  @UseGuards(SessionGuard)
+  async logout(@Req() req: AuthenticatedRequest, @Res() res: Response) {
+    const sessionId = req.session.id;
+
+    if (sessionId) {
+      // Revoke session in database
+      await this.sessionsService.revokeSession(sessionId);
+    }
+
+    // Destroy session in Redis
+    await new Promise<void>((resolve, reject) => {
+      req.session.destroy((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    // Redirect to login page
+    const webAppUrl = this.configService.get<string>('WEB_APP_URL') || 'http://localhost:3000';
+    res.redirect(`${webAppUrl}/login`);
   }
 }

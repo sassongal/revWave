@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import ReplyModal from './ReplyModal';
 
 interface Review {
   id: string;
@@ -48,6 +49,7 @@ export default function ReviewInbox({ onReviewClick }: ReviewInboxProps) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unreplied' | 'pending' | 'drafted' | 'replied'>('all');
   const [locationId, setLocationId] = useState<string>('');
+  const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     pageSize: 20,
@@ -132,6 +134,20 @@ export default function ReviewInbox({ onReviewClick }: ReviewInboxProps) {
         {labels[status as keyof typeof labels]}
       </span>
     );
+  }
+
+  function handleReviewClick(review: Review) {
+    setSelectedReview(review);
+    onReviewClick?.(review);
+  }
+
+  function handleModalClose() {
+    setSelectedReview(null);
+  }
+
+  function handleModalSuccess() {
+    setSelectedReview(null);
+    loadReviews(); // Refresh the list to show updated status
   }
 
   function renderStars(rating: number) {
@@ -274,7 +290,7 @@ export default function ReviewInbox({ onReviewClick }: ReviewInboxProps) {
               {reviews.map((review) => (
                 <tr
                   key={review.id}
-                  onClick={() => onReviewClick?.(review)}
+                  onClick={() => handleReviewClick(review)}
                   className="hover:bg-gray-50 cursor-pointer transition-colors"
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -338,6 +354,23 @@ export default function ReviewInbox({ onReviewClick }: ReviewInboxProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Reply Modal */}
+      {selectedReview && (
+        <ReplyModal
+          review={{
+            id: selectedReview.id,
+            rating: selectedReview.rating,
+            content: selectedReview.content || null,
+            reviewerName: selectedReview.reviewerName,
+            publishedAt: selectedReview.publishedAt,
+            replyStatus: selectedReview.repliedStatus,
+            location: selectedReview.location,
+          }}
+          onClose={handleModalClose}
+          onSuccess={handleModalSuccess}
+        />
       )}
     </div>
   );

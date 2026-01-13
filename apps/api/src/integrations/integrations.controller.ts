@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, Res, UseGuards, Param } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards, Param, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { SessionGuard } from '../common/guards/session.guard';
@@ -7,6 +7,7 @@ import { CurrentTenantId } from '../common/decorators/current-tenant-id.decorato
 import { GoogleBusinessAuthGuard } from './google/google-business-auth.guard';
 import { GoogleIntegrationsService } from './google/google-integrations.service';
 import { GoogleApiService } from './google/google-api.service';
+import { GoogleSyncService } from '../sync/google-sync.service';
 import { Session } from '../common/types/session.types';
 
 interface AuthenticatedRequest {
@@ -17,10 +18,13 @@ interface AuthenticatedRequest {
 @Controller('integrations')
 @UseGuards(SessionGuard, TenantGuard)
 export class IntegrationsController {
+  private readonly logger = new Logger(IntegrationsController.name);
+
   constructor(
     private readonly googleIntegrations: GoogleIntegrationsService,
     private readonly googleApi: GoogleApiService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly googleSyncService: GoogleSyncService
   ) {}
 
   /**
@@ -59,14 +63,17 @@ export class IntegrationsController {
   }
 
   /**
-   * POST /integrations/google/connect
+   * GET /integrations/google/connect
    * Initiates Google Business Profile OAuth flow
+   * Requires session with tenantId
    */
-  @Post('google/connect')
-  @UseGuards(GoogleBusinessAuthGuard)
+  @Get('google/connect')
+  @UseGuards(SessionGuard, TenantGuard, GoogleBusinessAuthGuard)
   async connectGoogle() {
     // Passport will handle the redirect to Google
     // This method won't actually be called due to the guard redirecting
+    // But if it is called, it means something went wrong
+    throw new InternalServerErrorException('OAuth redirect should have been handled by Passport');
   }
 
   /**
@@ -108,12 +115,16 @@ export class IntegrationsController {
         }
       );
 
-      // TODO: Trigger initial sync job here
-      // await this.syncService.triggerInitialSync(tenantId);
+      // Trigger initial sync in the background (with delay to avoid rate limits)
+      setTimeout(() => {
+        this.googleSyncService.syncGoogleData(tenantId).catch((error: Error) => {
+          this.logger.error(`Initial sync failed for tenant ${tenantId}:`, error);
+        });
+      }, 2000); // 2 second delay to avoid Google API rate limits
 
-      // Redirect to reviews page
+      // Redirect to dashboard
       const webAppUrl = this.configService.get<string>('WEB_APP_URL') || 'http://localhost:3000';
-      res.redirect(`${webAppUrl}/reviews?connected=true`);
+      res.redirect(`${webAppUrl}/dashboard?connected=true`);
     } catch (error) {
       console.error('Failed to store integration:', error);
       const webAppUrl = this.configService.get<string>('WEB_APP_URL') || 'http://localhost:3000';

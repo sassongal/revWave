@@ -16,6 +16,7 @@ export class TenantGuard implements CanActivate {
 
     // SessionGuard should run first
     if (!request.user) {
+      console.error('[TenantGuard] User not authenticated');
       throw new UnauthorizedException('User not authenticated');
     }
 
@@ -23,6 +24,10 @@ export class TenantGuard implements CanActivate {
     const tenantId = session.tenantId;
 
     if (!tenantId) {
+      console.error('[TenantGuard] No tenant context', {
+        userId: request.user.id,
+        sessionId: session?.id,
+      });
       throw new ForbiddenException('No tenant context');
     }
 
@@ -32,6 +37,11 @@ export class TenantGuard implements CanActivate {
     );
 
     if (!membership) {
+      console.error('[TenantGuard] User does not belong to tenant', {
+        userId: request.user.id,
+        tenantId,
+        userTenants: request.user.memberships?.map((m: Membership) => m.tenantId),
+      });
       throw new ForbiddenException('User does not belong to this tenant');
     }
 

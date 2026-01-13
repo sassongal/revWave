@@ -29,11 +29,25 @@ export class SessionsService {
       });
     });
 
-    // Create Session record in database for tracking
+    // Create or update Session record in database for tracking
     if (session.id) {
-      await this.prisma.session.create({
-        data: {
+      await this.prisma.session.upsert({
+        where: {
           sessionId: session.id,
+        },
+        create: {
+          sessionId: session.id,
+          userId,
+          tenantId,
+          expiresAt,
+          ipAddress,
+          userAgent,
+          data: {
+            userId,
+            tenantId,
+          },
+        },
+        update: {
           userId,
           tenantId,
           expiresAt,

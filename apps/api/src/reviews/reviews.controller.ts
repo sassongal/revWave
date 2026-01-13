@@ -9,14 +9,17 @@ import {
   Logger,
   HttpCode,
   HttpStatus,
+  Request,
 } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import { RepliesService } from './replies.service';
 import { AiService } from '../ai/ai.service';
+import { GoogleApiService } from '../integrations/google/google-api.service';
 import { SessionGuard } from '../common/guards/session.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { CurrentTenantId } from '../common/decorators/current-tenant-id.decorator';
 import { GetReviewsQueryDto } from './dto/get-reviews-query.dto';
+import { AuthenticatedRequest } from '../common/types/request.types';
 
 @Controller('reviews')
 @UseGuards(SessionGuard, TenantGuard)
@@ -27,6 +30,7 @@ export class ReviewsController {
     private readonly reviewsService: ReviewsService,
     private readonly repliesService: RepliesService,
     private readonly aiService: AiService,
+    private readonly googleApiService: GoogleApiService,
   ) {}
 
   /**
@@ -152,5 +156,95 @@ export class ReviewsController {
       language: hasHebrew ? 'Hebrew' : 'English',
       model,
     };
+  }
+
+  /**
+   * POST /reviews/:id/reply
+   * Publish a reply to Google and update the database
+   *
+   * Response:
+   * - success: boolean
+   * - message: string
+   * - replyId: UUID of the published reply
+   */
+  @Post(':id/reply')
+  @HttpCode(HttpStatus.OK)
+  async publishReply(
+    @Param('id') reviewId: string,
+    @CurrentTenantId() tenantId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    this.logger.log(
+      `Publishing reply for review ${reviewId} (tenant: ${tenantId})`,
+    );
+
+    try {
+      // Verify review belongs to tenant and fetch review with location
+      const review = await this.reviewsService.findOne(reviewId, tenantId);
+
+      if (!review) {
+        return {
+          success: false,
+          message: 'Review not found or does not belong to your organization',
+        };
+      }
+
+      // Check if review has an external ID (required for publishing to Google)
+      if (!review.externalId) {
+        return {
+          success: false,
+          message: 'Review does not have a Google review ID',
+        };
+      }
+
+      // Find the latest draft reply
+      const draftReply = await this.repliesService.findLatestDraft(reviewId);
+
+      if (!draftReply) {
+        return {
+          success: false,
+          message: 'No draft reply found for this review',
+        };
+      }
+
+      // Publish reply to Google using the review's external ID
+      await this.googleApiService.publishReply(
+        tenantId,
+        review.externalId,
+        draftReply.content,
+      );
+
+      // Mark reply as published in database
+      const userId = req.session.userId || 'system';
+      const publishedReply = await this.repliesService.publish(
+        draftReply.id,
+        userId,
+      );
+
+      // Update review replied status to 'replied'
+      await this.reviewsService.updateReplyStatus(reviewId, tenantId, 'replied');
+
+      this.logger.log(
+        `Successfully published reply ${publishedReply.id} for review ${reviewId}`,
+      );
+
+      return {
+        success: true,
+        message: 'Reply published successfully',
+        replyId: publishedReply.id,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish reply for review ${reviewId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+
+      // Update review status to indicate failure
+      await this.reviewsService.updateReplyStatus(reviewId, tenantId, 'pending');
+
+      return {
+        success: false,
+        message: `Failed to publish reply: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }

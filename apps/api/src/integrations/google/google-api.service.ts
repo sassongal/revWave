@@ -166,13 +166,13 @@ export class GoogleApiService {
     url: string,
     accessToken: string,
     options: {
-      method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+      method?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
       data?: any;
       params?: any;
     } = {},
   ): Promise<T> {
-    const maxRetries = 3;
-    const delays = [1000, 2000, 4000]; // Exponential backoff: 1s, 2s, 4s
+    const maxRetries = 5; // Increased retries for rate limits
+    const delays = [2000, 5000, 10000, 20000, 40000]; // Longer delays for rate limits
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -192,7 +192,26 @@ export class GoogleApiService {
         const axiosError = error as AxiosError;
         const status = axiosError.response?.status;
 
-        // Don't retry on 4xx errors (except 401 which should have been handled by token refresh)
+        // Handle 429 Rate Limit - always retry with exponential backoff
+        if (status === 429) {
+          if (attempt === maxRetries - 1) {
+            this.logger.error(
+              `Rate limit exceeded after ${maxRetries} attempts. Please wait a few minutes and try again.`,
+            );
+            throw new Error(
+              'Google API rate limit exceeded. Please wait a few minutes and try again.',
+            );
+          }
+
+          const delay = delays[attempt];
+          this.logger.warn(
+            `Rate limit hit (429), waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Don't retry on other 4xx errors (except 401 which should have been handled by token refresh)
         if (status && status >= 400 && status < 500 && status !== 401) {
           this.logger.error(
             `API request failed with ${status}`,
@@ -203,7 +222,7 @@ export class GoogleApiService {
           );
         }
 
-        // If this is the last attempt, throw the error
+        // Retry on 5xx errors or network errors
         if (attempt === maxRetries - 1) {
           this.logger.error(
             `API request failed after ${maxRetries} attempts`,
@@ -297,6 +316,38 @@ export class GoogleApiService {
     );
 
     return reviews;
+  }
+
+  /**
+   * Publish a reply to a Google review
+   * @param tenantId - The tenant ID
+   * @param reviewName - The review resource name (e.g., "locations/{locationId}/reviews/{reviewId}")
+   * @param replyText - The reply text to publish
+   */
+  async publishReply(
+    tenantId: string,
+    reviewName: string,
+    replyText: string,
+  ): Promise<void> {
+    this.logger.log(`Publishing reply to review ${reviewName}`);
+
+    const accessToken = await this.getAccessToken(tenantId);
+
+    // Google My Business API v4 endpoint for replying to reviews
+    const replyUrl = `${this.reviewsBaseUrl}/${reviewName}/reply`;
+
+    await this.makeApiRequest(
+      replyUrl,
+      accessToken,
+      {
+        method: 'PUT',
+        data: {
+          comment: replyText,
+        },
+      },
+    );
+
+    this.logger.log(`Successfully published reply to review ${reviewName}`);
   }
 
   /**

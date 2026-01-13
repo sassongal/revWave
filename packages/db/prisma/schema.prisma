@@ -226,9 +226,9 @@ model Reply {
 
 model Tag {
   id          String   @id @default(uuid())
-  publicCode  String   @unique @map("public_code") // Short code for /t/{code}
+  publicCode  String   @unique @map("public_code") // Short code for /t/{code}, human-safe
   name        String?  // Internal label
-  status      String   @default("active") // active, inactive
+  status      String   @default("active") // active, disabled, lost
 
   locationId  String?  @map("location_id")
   tenantId    String   @map("tenant_id")
@@ -243,6 +243,7 @@ model Tag {
 
   @@index([tenantId])
   @@index([publicCode])
+  @@index([status])
   @@map("tags")
 }
 
@@ -334,6 +335,7 @@ model CampaignRecipient {
   status        String   @default("pending") // pending, sent, failed
   sentAt        DateTime? @map("sent_at")
   errorMessage  String?   @map("error_message") @db.Text
+  unsubscribeToken String? @unique @map("unsubscribe_token") // Unique token for unsubscribe link
 
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
