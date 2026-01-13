@@ -230,33 +230,98 @@ pnpm build:web        # Build web only
 
 ## 🧪 Testing
 
+### Unit Tests
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests for specific module
+pnpm test contacts.service.spec.ts
+pnpm test campaigns.service.spec.ts
+pnpm test unsubscribe.service.spec.ts
+
+# Run tests with coverage
+pnpm test:cov
+```
+
 ### Manual Test Flow
 
-1. **Start services**:
+#### 1. **Start services**:
    ```bash
    pnpm docker:up
    pnpm db:generate
+   pnpm db:migrate:dev
    pnpm dev
    ```
 
-2. **Test login**:
+#### 2. **Test Authentication**:
    - Visit http://localhost:3000
    - Click "Sign in with Google"
    - Complete OAuth flow
    - Should redirect to dashboard
+   - Verify session cookie is set (HttpOnly)
 
-3. **Test API**:
+#### 3. **Test Contacts Management**:
+   - Navigate to `/crm/contacts`
+   - Click "Add Contact"
+   - Fill form: email (required), name, phone, source
+   - Submit and verify contact appears in table
+   - Test "Revoke Consent" action
+   - Verify contact status changes to "Unsubscribed"
+
+#### 4. **Test Campaign Creation**:
+   - Navigate to `/crm/campaigns`
+   - Click "New Campaign"
+   - Fill form:
+     - Name: "Test Campaign"
+     - Subject: "Test Email"
+     - Body (HTML): `<h1>Hello</h1><p>This is a test email.</p>`
+   - Submit and verify redirect to campaign detail page
+
+#### 5. **Test Campaign Sending**:
+   - On campaign detail page, click "Send Campaign"
+   - Confirm sending
+   - Verify:
+     - Campaign status changes to "scheduled" then "sent"
+     - Recipients are created (only for subscribed contacts)
+     - Delivery report shows stats (total, sent, failed, skipped)
+
+#### 6. **Test Unsubscribe Flow**:
+   - Find a campaign recipient with unsubscribe token
+   - Visit: `http://localhost:3000/unsubscribe/{token}`
+   - Verify:
+     - Page redirects to API endpoint
+     - API processes unsubscribe
+     - Redirects back with success message
+     - Contact consent status is revoked
+     - Recipient status is `skipped_unsubscribed` (if pending)
+
+#### 7. **Test API Endpoints**:
    ```bash
    # Check health
    curl http://localhost:3001/health
 
-   # Get user info (requires cookie)
-   curl -b cookies.txt http://localhost:3001/auth/me
+   # Get campaigns (requires auth cookie)
+   curl -b cookies.txt http://localhost:3001/campaigns
+
+   # Create campaign (requires auth cookie)
+   curl -X POST -b cookies.txt \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Test","subject":"Test","bodyHtml":"<p>Test</p>"}' \
+     http://localhost:3001/campaigns
+
+   # Test unsubscribe (public, no auth)
+   curl http://localhost:3001/unsubscribe/{valid-token}
    ```
 
-4. **Verify database**:
+#### 8. **Verify Database**:
    - Open pgAdmin: http://localhost:5050
-   - Check `users`, `tenants`, `memberships`, `sessions` tables
+   - Check tables:
+     - `contacts` - verify tenant scoping
+     - `campaigns` - verify tenant scoping
+     - `campaign_recipients` - verify unsubscribe tokens
+     - Verify all queries include `tenant_id` filter
 
 ## 📊 Database Schema
 
